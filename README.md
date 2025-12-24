@@ -45,4 +45,3 @@ The goal of this application is to transform raw scraped data into actionable bu
 ├── products_data.csv     # Scraped product information
 ├── reviews_data.csv      # Customer reviews and star ratings
 └── testimonials_data.csv # Short-form customer testimonials
-text```
