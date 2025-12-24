@@ -38,7 +38,8 @@ def load_data(file_name, page_type=None):
 
 @st.cache_resource
 def get_sentiment_analyzer():
-    return pipeline("sentiment-analysis", model="distilbert-base-uncased-finetuned-sst-2-english")
+    # Use a much smaller model to stay under Render's 512MB limit
+    return pipeline("sentiment-analysis", model="pysentimiento/bertweet-ca-sentiment") 
 
 analyzer = get_sentiment_analyzer()
 
