@@ -38,8 +38,9 @@ def load_data(file_name, page_type=None):
 
 @st.cache_resource
 def get_sentiment_analyzer():
-    # Use a much smaller model to stay under Render's 512MB limit
-    return pipeline("sentiment-analysis", model="pysentimiento/bertweet-ca-sentiment") 
+    # This model is the industry standard for small sentiment analysis apps.
+    # It is roughly 260MB, which fits in Render's 512MB RAM when using torch-cpu.
+    return pipeline("sentiment-analysis", model="distilbert-base-uncased-finetuned-sst-2-english")
 
 analyzer = get_sentiment_analyzer()
 
