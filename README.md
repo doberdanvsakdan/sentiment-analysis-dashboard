@@ -38,6 +38,8 @@ The goal of this application is to transform raw scraped data into actionable bu
 
 ---
 
+You can view the app on [Render](url): 
+
 ## 📂 Project Structure
 ```text
 ├── app.py                # Main Streamlit application code
