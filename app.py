@@ -6,6 +6,7 @@ from datetime import date
 import calendar
 from wordcloud import WordCloud
 import matplotlib.pyplot as plt
+import os
 
 # ==========================================
 # 1. CONFIGURATION
@@ -22,6 +23,7 @@ st.set_page_config(
 @st.cache_data
 def load_data(file_name, page_type=None):
     try:
+        # Looks in local root (Colab root or GitHub root)
         df = pd.read_csv(file_name)
         if 'date' in df.columns:
             df['date'] = pd.to_datetime(df['date'], errors="coerce")
@@ -38,18 +40,20 @@ def load_data(file_name, page_type=None):
 
 @st.cache_resource
 def get_sentiment_analyzer():
-    # This model is the industry standard for small sentiment analysis apps.
-    # It is roughly 260MB, which fits in Render's 512MB RAM when using torch-cpu.
+    """
+    Load model only when needed. 
+    DistilBERT uses ~260MB RAM. Render Free tier has 512MB total.
+    Using torch-cpu in requirements.txt is MANDATORY for this to work.
+    """
     return pipeline("sentiment-analysis", model="distilbert-base-uncased-finetuned-sst-2-english")
-
-analyzer = get_sentiment_analyzer()
 
 # ==========================================
 # 3. HELPER FUNCTIONS
 # ==========================================
 def generate_wordcloud(text, title, colormap):
     if not text or not text.strip(): return None
-    wc = WordCloud(width=800, height=400, background_color="white", colormap=colormap, max_words=50).generate(text)
+    # Reduced max_words to save memory during image generation
+    wc = WordCloud(width=600, height=300, background_color="white", colormap=colormap, max_words=30).generate(text)
     fig, ax = plt.subplots(figsize=(10, 5))
     ax.imshow(wc, interpolation='bilinear')
     ax.axis("off")
@@ -79,7 +83,7 @@ elif page == "Testimonials":
         st.table(clean_t)
 
 # ==========================================
-# 6. PAGE: REVIEWS ANALYSIS (FIXED SYNC)
+# 6. PAGE: REVIEWS ANALYSIS
 # ==========================================
 elif page == "Reviews Analysis":
     st.title("⭐ Reviews Sentiment & Trend Analysis")
@@ -90,11 +94,9 @@ elif page == "Reviews Analysis":
         df_r['year'] = df_r['date'].dt.year
         available_years = sorted(df_r['year'].unique())
         
-        # Determine strict data bounds
         abs_min_date = df_r['date'].min().replace(day=1).date()
         abs_max_date = df_r['date'].max().replace(day=1).date()
 
-        # --- SYNC LOGIC (WITH BOUNDARY CLIPPING) ---
         if 'date_range' not in st.session_state:
             st.session_state.date_range = (abs_min_date, abs_max_date)
 
@@ -104,19 +106,15 @@ elif page == "Reviews Analysis":
                 st.session_state.date_range = (abs_min_date, abs_max_date)
             else:
                 y = int(choice)
-                # Clip the start/end so they never go below abs_min or above abs_max
                 new_start = max(abs_min_date, date(y, 1, 1))
                 new_end = min(abs_max_date, date(y, 12, 1))
                 st.session_state.date_range = (new_start, new_end)
 
-        # --- FILTER UI ---
         st.subheader("📅 Temporal Filters")
-        
         year_options = ["All"] + [str(y) for y in available_years]
         st.radio("Quick Select Year:", year_options, index=0, 
                  key="year_radio", on_change=sync_from_year, horizontal=True)
 
-        # The Slider (Safely constrained to abs_min and abs_max)
         st.slider(
             "Select Month Range",
             min_value=abs_min_date,
@@ -125,7 +123,6 @@ elif page == "Reviews Analysis":
             format="MMM YYYY"
         )
 
-        # Filter Masking
         start_m, end_m = st.session_state.date_range
         last_day = calendar.monthrange(end_m.year, end_m.month)[1]
         mask = (df_r['date'].dt.date >= start_m) & (df_r['date'].dt.date <= date(end_m.year, end_m.month, last_day))
@@ -133,14 +130,16 @@ elif page == "Reviews Analysis":
 
         st.info(f"Analysis Period: **{start_m.strftime('%B %Y')}** to **{end_m.strftime('%B %Y')}** ({len(filtered_df)} reviews)")
 
-        # --- VISUALS ---
         st.divider()
         m1, m2 = st.columns(2)
         m1.metric("Reviews Selected", len(filtered_df))
         m2.metric("Avg Rating", f"{filtered_df['rating'].mean():.2f} ⭐")
 
         if st.button("🚀 Run AI Analysis"):
-            with st.spinner("Calculating..."):
+            with st.spinner("Loading AI Model & Analyzing..."):
+                # Load analyzer ONLY when button is clicked to save RAM
+                analyzer = get_sentiment_analyzer()
+                
                 texts = filtered_df['review'].fillna("").astype(str).tolist()
                 results = analyzer(texts, truncation=True)
                 filtered_df['Sentiment'] = [r['label'] for r in results]
@@ -164,13 +163,11 @@ elif page == "Reviews Analysis":
                     f2 = generate_wordcloud(neg_txt, "Negative Themes", "Reds")
                     if f2: st.pyplot(f2)
 
-                # Confidence Metrics
                 avg_conf = filtered_df.groupby('Sentiment')['Confidence'].mean()
                 c1, c2 = st.columns(2)
                 if "POSITIVE" in avg_conf: c1.metric("Pos Confidence", f"{avg_conf['POSITIVE']:.2%}")
                 if "NEGATIVE" in avg_conf: c2.metric("Neg Confidence", f"{avg_conf['NEGATIVE']:.2%}")
 
-                # Final Table
                 final_view = filtered_df.copy()
                 final_view['date'] = final_view['date'].dt.strftime('%d/%m/%Y')
                 st.dataframe(final_view[['date', 'review', 'rating', 'Sentiment', 'Confidence']], use_container_width=True)
@@ -180,4 +177,4 @@ elif page == "Reviews Analysis":
             st.dataframe(prev_view[['date', 'review', 'rating']], use_container_width=True)
 
 st.sidebar.markdown("---")
-st.sidebar.caption("v6.1 - Safety Fixed Edition")
+st.sidebar.caption("v6.2 - RAM Optimized Edition")
